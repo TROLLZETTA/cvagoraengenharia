@@ -1,110 +1,62 @@
 const express = require("express");
-const multer = require("multer");
 const cors = require("cors");
+const multer = require("multer");
 const admin = require("firebase-admin");
-const path = require("path");
 
-// 🔐 IMPORTAR SUA CHAVE FIREBASE
-const serviceAccount = require("./firebase-key.json");
-
-// 🔥 INICIAR FIREBASE
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  storageBucket: "cvagora-engenharia.firebasestorage.app" // 🔥 ALTERE AQUI
-});
-
-const db = admin.firestore();
-const bucket = admin.storage().bucket();
-
-// 🚀 APP
 const app = express();
 app.use(cors());
-app.use(express.json());
 
-// 📦 CONFIG UPLOAD (MEMÓRIA + LIMITE)
-const storage = multer.memoryStorage();
+// 🔐 FIREBASE VIA ENV
+const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
 
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 15 * 1024 * 1024 // 15MB
-  },
-  fileFilter: (req, file, cb) => {
-    // 🔐 BLOQUEIO BÁSICO DE EXTENSÕES PERIGOSAS
-    const ext = path.extname(file.originalname).toLowerCase();
-
-    const proibidos = [".exe", ".bat", ".sh", ".js"];
-
-    if (proibidos.includes(ext)) {
-      return cb(new Error("Tipo de arquivo não permitido"));
-    }
-
-    cb(null, true);
-  }
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  storageBucket: "SEU_BUCKET.appspot.com"
 });
 
-// 🧠 ROTA PRINCIPAL (RECEBE FORMULÁRIO)
-app.post("/enviar", upload.array("files"), async (req, res) => {
+const bucket = admin.storage().bucket();
 
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.get("/", (req, res) => {
+  res.send("API CVAGORA funcionando");
+});
+
+app.post("/enviar", upload.array("files"), async (req, res) => {
   try {
     const { nome, telefone, tipo, descricao } = req.body;
-    const files = req.files || [];
 
-    if (!nome || !telefone) {
-      return res.status(400).json({ erro: "Dados obrigatórios" });
-    }
+    const arquivosUrls = [];
 
-    const urls = [];
-
-    // 📤 UPLOAD PARA FIREBASE STORAGE
-    for (const file of files) {
-
+    for (const file of req.files) {
       const nomeArquivo = Date.now() + "-" + file.originalname;
       const fileUpload = bucket.file(nomeArquivo);
 
-      await fileUpload.save(file.buffer, {
-        metadata: {
-          contentType: file.mimetype
-        }
-      });
+      await fileUpload.save(file.buffer);
 
       const url = `https://storage.googleapis.com/${bucket.name}/${nomeArquivo}`;
-      urls.push(url);
+      arquivosUrls.push(url);
     }
 
-    // 💾 SALVAR NO BANCO
-    await db.collection("leads").add({
+    await admin.firestore().collection("leads").add({
       nome,
       telefone,
       tipo,
       descricao,
-      arquivos: urls,
-      criadoEm: new Date()
+      arquivos: arquivosUrls,
+      data: new Date()
     });
 
-    return res.json({
-      sucesso: true,
-      mensagem: "Lead salvo com sucesso"
-    });
+    res.json({ ok: true });
 
-  } catch (erro) {
-    console.error("ERRO:", erro);
-
-    return res.status(500).json({
-      erro: true,
-      mensagem: "Erro ao processar solicitação"
-    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Erro ao enviar");
   }
 });
 
-// 🧪 ROTA TESTE
-app.get("/", (req, res) => {
-  res.send("🚀 API CVAGORA funcionando");
-});
-
-// 🔥 INICIAR SERVIDOR
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
+  console.log("Servidor rodando na porta " + PORT);
 });
