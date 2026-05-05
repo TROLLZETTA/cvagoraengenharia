@@ -32,17 +32,18 @@ app.post("/enviar", upload.array("files"), async (req, res) => {
       const nomeArquivo = Date.now() + "-" + file.originalname;
       const fileUpload = bucket.file(nomeArquivo);
 
-      await fileUpload.save(file.buffer);
+      await fileUpload.save(file.buffer, {
+        metadata: { contentType: file.mimetype }
+      });
 
-// 🔐 gera URL assinada (funciona mesmo com Storage privado)
-const [url] = await fileUpload.getSignedUrl({
-  action: 'read',
-  expires: '03-01-2500' // depois você pode reduzir (ex: 7 dias)
-});
+      // 🔐 URL segura
+      const [url] = await fileUpload.getSignedUrl({
+        action: "read",
+        expires: "03-01-2500"
+      });
 
-arquivosUrls.push(url);
-});
-    
+      arquivosUrls.push(url);
+    }
 
     await admin.firestore().collection("leads").add({
       nome,
