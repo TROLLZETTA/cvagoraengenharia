@@ -11,7 +11,7 @@ const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  storageBucket: "SEU_BUCKET.appspot.com"
+  storageBucket: "cvagora-engenharia.firebasestorage.app"
 });
 
 const bucket = admin.storage().bucket();
@@ -34,9 +34,15 @@ app.post("/enviar", upload.array("files"), async (req, res) => {
 
       await fileUpload.save(file.buffer);
 
-      const url = `https://storage.googleapis.com/${bucket.name}/${nomeArquivo}`;
-      arquivosUrls.push(url);
-    }
+// 🔐 gera URL assinada (funciona mesmo com Storage privado)
+const [url] = await fileUpload.getSignedUrl({
+  action: 'read',
+  expires: '03-01-2500' // depois você pode reduzir (ex: 7 dias)
+});
+
+arquivosUrls.push(url);
+});
+    
 
     await admin.firestore().collection("leads").add({
       nome,
